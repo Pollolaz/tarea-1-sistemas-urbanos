@@ -37,16 +37,16 @@ Tarea individual centrada en el ciclo completo de una tarea predictiva supervisa
 > Rellena estos campos — los usaré para armar el notebook y mantener coherencia en todas las secciones.
 
 - **Nombre:** Nicolás Herrera y Vincent Metzker
-- **Problema urbano elegido:** Estimación de tiempo de viaje
-- **Tipo de tarea:** Regresión
-- **Variable objetivo:** Tiempo de Viaje
-- **Justificación de la variable objetivo:** El tiempo de viaje es una variable central en sistemas urbanos inteligentes porque condensa el efecto conjunto de la geografía, la infraestructura vial, la demanda y la dinámica temporal de la ciudad. Predecirlo con antelación habilita aplicaciones directas (ETA para pasajeros y plataformas, ruteo, pricing dinámico, planificación de flotas y evaluación de políticas de transporte) y permite estudiar desigualdades espaciales de accesibilidad. Desde el punto de vista del modelamiento, es una variable continua, medible con precisión a partir de las marcas temporales de pickup/dropoff, y cuya varianza está explicada por una mezcla rica de señales numéricas (distancia, monto), categóricas (tipo de tarifa, método de pago, día/hora) y fuertemente geoespaciales (origen y destino), lo que la hace ideal para comparar estrategias de representación como lo exige la tarea. Además, conecta de manera explícita con la lectura sugerida del curso (*Deep Architecture for Citywide Travel Time Estimation Incorporating Contextual Information*).
-- **Fuente(s) de datos:** [NYC Yellow Taxi Trip Data](https://www.kaggle.com/datasets/elemento/nyc-yellow-taxi-trip-data) o [NYC Gov Sitee](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page)
-- **Tamaño aproximado del dataset:** 12.2 Millones de entries / 19 columnas (se planea trabajar con un subconjunto estratificado por mes/día para mantener tiempos de entrenamiento razonables — decisión a justificar en el notebook).
-- **Variables numéricas clave:** `trip_distance`, `total_amount`, `passenger_count`, además de variables derivadas de `tpep_pickup_datetime` / `tpep_dropoff_datetime` (hora del día, día de la semana, mes). La variable objetivo `trip_duration` se calcula como la diferencia entre dropoff y pickup.
-- **Variables categóricas / ordinales clave:** `payment_type`, `RateCodeID`, `VendorID`, `store_and_fwd_flag`, `hour_of_day` (ordinal), `day_of_week` (ordinal), `is_weekend` (binaria).
-- **Variables geoespaciales disponibles:** `Pickup_longitude`, `Pickup_latitude`, `Dropoff_longitude`, `Dropoff_latitude` (las versiones antiguas del dataset traen coordenadas; las más recientes sólo traen `PULocationID`/`DOLocationID` — revisar cuál corresponde al año descargado).
-- **Estrategia geoespacial prevista:** **ambas** — (1) coordenadas continuas normalizadas para el MLP base (lat/lon de pickup y dropoff + distancia Haversine); (2) discretización del espacio mediante una grilla regular (p. ej. celdas de ~500 m o H3 resolución 8) para origen y destino, usada como variable categórica con capa de embedding en el MLP con embeddings. Esto permite comparar explícitamente la representación continua vs. discreta-con-embedding, que es uno de los análisis pedidos.
+- **Problema urbano elegido:** Predicción de zona de destino de viajes de taxi
+- **Tipo de tarea:** Clasificación multiclase
+- **Variable objetivo:** `DO_Borough_id` — borough de destino (Manhattan, Brooklyn, Queens, Bronx, Staten Island)
+- **Justificación de la variable objetivo:** Predecir el borough de destino de un viaje a partir de información disponible en el momento del pickup (zona de origen, hora, día, metadata socioeconómica del barrio de origen) es un problema con aplicaciones directas en sistemas urbanos: permite anticipar flujos de demanda entre zonas, optimizar la redistribución de flotas y estudiar patrones de movilidad entre sectores de distinta composición social. Desde el punto de vista del modelamiento, la variable tiene cardinalidad baja (5 clases principales), lo que hace la tarea tratable, pero presenta desbalance natural (Manhattan y Queens concentran la mayoría de los destinos), lo que exige analizar métricas como balanced accuracy y F1 por clase. Las variables de entrada mezclan señales numéricas continuas (metadata census ACS del barrio de origen), categóricas ordinales (hora, día) y una variable geoespacial discreta de alta cardinalidad (PULocationID, 265 zonas), lo que hace el problema ideal para comparar representaciones con y sin embeddings.
+- **Fuente(s) de datos:** [NYC Yellow Taxi Trip Data](https://www.kaggle.com/datasets/elemento/nyc-yellow-taxi-trip-data) o [NYC Gov Site](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) + [US Census Bureau ACS](https://data.census.gov) para metadata de boroughs
+- **Tamaño aproximado del dataset:** 12.2 Millones de entries / 19 columnas originales. Se trabaja con muestra de 300k filas (`trips_sample_with_cats.parquet`) para tiempos de entrenamiento razonables.
+- **Variables numéricas clave (disponibles al momento del pickup):** `passenger_count`, encodings cíclicos de tiempo (`hour_sin`, `hour_cos`, `dow_sin`, `dow_cos`), metadata Census ACS del borough de origen (`PU_Population`, `PU_MedianHouseholdIncome`, `PU_HousingUnits`, `PU_Transport_*_pct`).
+- **Variables categóricas / ordinales clave:** `PULocationID` (265 zonas — variable clave, candidata principal para embedding), `PU_Borough_id`, `RatecodeID`, `VendorID`, `hour`, `day_of_week`, `is_weekend`, `is_rush_hour`.
+- **Variables geoespaciales disponibles:** `PULocationID` / `DOLocationID` (zonas TLC, discretas). No se usan coordenadas continuas ya que el dataset 2015 no las incluye de forma confiable.
+- **Estrategia geoespacial prevista:** `PULocationID` (265 zonas) como variable categórica con capa de embedding en el MLP con embeddings. Esto permite al modelo aprender una representación densa del espacio de origen y comparar explícitamente con el MLP base que recibe el borough como one-hot (5 dimensiones).
 - **Framework:** PyTorch
 - **Restricciones de cómputo:** Puede ser corrido en local o Google Colab (GPU gratuita). Dado el tamaño del dataset original, se trabajará con un subconjunto (~200k–1M filas) y `num_workers` ajustado para el DataLoader.
 
@@ -114,4 +114,80 @@ Tarea individual centrada en el ciclo completo de una tarea predictiva supervisa
 │   └── tarea1.ipynb      # Entrega final
 ├── class_examples/       # Referencias de clase (Taller_T1, ayudantía)
 └── src/                  # (opcional) utilidades reutilizables
+```
+
+---
+
+## Setup del entorno con Miniconda
+
+### 1. Crear y activar el entorno
+
+```bash
+conda create -n nyc-taxi python=3.11 -y
+conda activate nyc-taxi
+```
+
+### 2. Instalar dependencias
+
+```bash
+# Core data
+pip install pandas numpy pyarrow
+
+# Machine learning y deep learning
+pip install scikit-learn torch torchvision
+
+# Visualización
+pip install matplotlib seaborn
+
+# Jupyter
+pip install jupyterlab ipykernel
+
+# Registrar el entorno como kernel en Jupyter
+python -m ipykernel install --user --name nyc-taxi --display-name "nyc-taxi"
+```
+
+### 3. Levantar Jupyter
+
+```bash
+jupyter lab
+```
+
+---
+
+## Comandos útiles
+
+```bash
+# Ver entornos disponibles
+conda env list
+
+# Activar / desactivar
+conda activate nyc-taxi
+conda deactivate
+
+# Ver paquetes instalados
+pip list
+
+# Exportar entorno (para reproducibilidad)
+pip freeze > requirements.txt
+
+# Recrear desde requirements
+pip install -r requirements.txt
+
+# Eliminar el entorno si querés empezar de cero
+conda env remove -n nyc-taxi
+```
+
+---
+
+## Archivos de metadata geoespacial
+
+| Archivo | Descripción |
+|---|---|
+| `taxi_zone_lookup.csv` | Lookup original de zonas TLC (LocationID → Borough, Zone) |
+| `borough_census_data.csv` | Metadata ACS por borough — **verificar valores en census.gov antes de usar** |
+| `enrich_taxi_zones.py` | Genera `taxi_zone_lookup_enriched.csv` con el join de los dos anteriores |
+
+```bash
+# Generar el lookup enriquecido
+python enrich_taxi_zones.py
 ```
