@@ -2,3 +2,5 @@
 !*taxi_zone_lookup*
 *.parquet
 !*yellow_tripdata*
+*.docx
+*.xlsx
