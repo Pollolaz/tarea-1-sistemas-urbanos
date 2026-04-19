@@ -27,25 +27,22 @@ Tarea individual centrada en el ciclo completo de una tarea predictiva supervisa
 
 ## Métricas
 
-- **Regresión:** MAE, MAPE, RMSE, R² cuando corresponda.
 - **Clasificación:** accuracy, balanced accuracy, matriz de confusión, precision, recall, F1.
 
 ---
 
 ## Información a completar por el estudiante
 
-> Rellena estos campos — los usaré para armar el notebook y mantener coherencia en todas las secciones.
-
 - **Nombre:** Nicolás Herrera y Vincent Metzker
 - **Problema urbano elegido:** Predicción de zona de destino de viajes de taxi
 - **Tipo de tarea:** Clasificación multiclase
-- **Variable objetivo:** `DO_Borough_id` — borough de destino (Manhattan, Brooklyn, Queens, Bronx, Staten Island)
-- **Justificación de la variable objetivo:** Predecir el borough de destino de un viaje a partir de información disponible en el momento del pickup (zona de origen, hora, día, metadata socioeconómica del barrio de origen) es un problema con aplicaciones directas en sistemas urbanos: permite anticipar flujos de demanda entre zonas, optimizar la redistribución de flotas y estudiar patrones de movilidad entre sectores de distinta composición social. Desde el punto de vista del modelamiento, la variable tiene cardinalidad baja (5 clases principales), lo que hace la tarea tratable, pero presenta desbalance natural (Manhattan y Queens concentran la mayoría de los destinos), lo que exige analizar métricas como balanced accuracy y F1 por clase. Las variables de entrada mezclan señales numéricas continuas (metadata census ACS del barrio de origen), categóricas ordinales (hora, día) y una variable geoespacial discreta de alta cardinalidad (PULocationID, 265 zonas), lo que hace el problema ideal para comparar representaciones con y sin embeddings.
-- **Fuente(s) de datos:** [NYC Yellow Taxi Trip Data](https://www.kaggle.com/datasets/elemento/nyc-yellow-taxi-trip-data) o [NYC Gov Site](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) + [US Census Bureau ACS](https://data.census.gov) para metadata de boroughs
+- **Variable objetivo:** `DOLocationId` — zona de destino.
+- **Justificación de la variable objetivo:** Predecir la zona de destino (`DOLocationID`) de un viaje a partir de información disponible en el momento del pickup (zona de origen, hora, día, metadata socioeconómica del barrio de origen) es un problema con aplicaciones directas en sistemas urbanos: permite anticipar flujos de demanda a nivel granular de zona, optimizar la redistribución de flotas y estudiar patrones de movilidad intrazonal. A diferencia de predecir el borough (5 clases), predecir la zona de destino plantea un problema de clasificación de alta cardinalidad (~100–150 clases activas tras filtrar zonas con muy pocos viajes), con fuerte desbalance natural (zonas del centro de Manhattan concentran la mayoría de los destinos). Esto hace que la accuracy estándar sea poco informativa y exige métricas como balanced accuracy, F1 macro y Top-K accuracy. Las variables de entrada mezclan señales numéricas continuas (metadata Census ACS del barrio de origen), categóricas ordinales (hora, día) y una variable geoespacial discreta de alta cardinalidad (PULocationID, 265 zonas), lo que hace el problema ideal para comparar representaciones con y sin embeddings: el MLP base recibe la información de origen agregada a nivel borough (`PU_Borough_id`, one-hot de 5 dims) sin acceso a la zona exacta, mientras que el MLP con embeddings recibe `PULocationID` directamente y aprende una representación densa de las 265 zonas de origen.
+- **Fuente(s) de datos:** [NYC Gov Site](https://www.nyc.gov/site/tlc/about/tlc-trip-record-data.page) + [US Census Bureau ACS](https://data.census.gov) para metadata de boroughs de New York City.
 - **Tamaño aproximado del dataset:** 12.2 Millones de entries / 19 columnas originales. Se trabaja con muestra de 300k filas (`trips_sample_with_cats.parquet`) para tiempos de entrenamiento razonables.
-- **Variables numéricas clave (disponibles al momento del pickup):** `passenger_count`, encodings cíclicos de tiempo (`hour_sin`, `hour_cos`, `dow_sin`, `dow_cos`), metadata Census ACS del borough de origen (`PU_Population`, `PU_MedianHouseholdIncome`, `PU_HousingUnits`, `PU_Transport_*_pct`).
+- **Variables numéricas clave (disponibles al momento del pickup):** encodings cíclicos de tiempo (`hour_sin`, `hour_cos`, `dow_sin`, `dow_cos`), metadata Census ACS del borough de origen (`PU_Population`, `PU_MedianHouseholdIncome`, `PU_HousingUnits`, `PU_Transport_*_pct`).
 - **Variables categóricas / ordinales clave:** `PULocationID` (265 zonas — variable clave, candidata principal para embedding), `PU_Borough_id`, `RatecodeID`, `VendorID`, `hour`, `day_of_week`, `is_weekend`, `is_rush_hour`.
-- **Variables geoespaciales disponibles:** `PULocationID` / `DOLocationID` (zonas TLC, discretas). No se usan coordenadas continuas ya que el dataset 2015 no las incluye de forma confiable.
+- **Variables geoespaciales disponibles:** `PULocationID` / `DOLocationID` (zonas TLC, discretas). No se usan coordenadas continuas ya que el dataset 2026 no las incluye de forma directa.
 - **Estrategia geoespacial prevista:** `PULocationID` (265 zonas) como variable categórica con capa de embedding en el MLP con embeddings. Esto permite al modelo aprender una representación densa del espacio de origen y comparar explícitamente con el MLP base que recibe el borough como one-hot (5 dimensiones).
 - **Framework:** PyTorch
 - **Restricciones de cómputo:** Puede ser corrido en local o Google Colab (GPU gratuita). Dado el tamaño del dataset original, se trabajará con un subconjunto (~200k–1M filas) y `num_workers` ajustado para el DataLoader.
@@ -190,4 +187,4 @@ conda env remove -n nyc-taxi
 ```bash
 # Generar el lookup enriquecido
 python enrich_taxi_zones.py
-```
+```                                                                                                                                                                                                                                                                                                                                                   
